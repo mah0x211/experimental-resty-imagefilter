@@ -148,3 +148,76 @@ end
 
 これでブラウザから画像ファイルにアクセスすると、エラーログに画像ファイルの実パスとサイズと画質の指定値のログが吐き出されるのが確認できた。
 
+### 画像ファイルの変換と保存
+
+ここまできたら後は変換してブラウザに返すだけなんだけど `lua-imlib2` には画質を設定する項目がなかった。。。なんか面倒になって放置しようかと思ったけど、ふて寝して晩ご飯食べたらせっかくだしとやる気が復活。というわけで `luarocks remove lua-imlib2` で削除して、代わりにシンプルな `lua-thumbnailer` - https://github.com/mah0x211/lua-thumbnailer というモジュールを書いたので、これを `luarocks install https://raw.githubusercontent.com/mah0x211/lua-thumbnailer/master/thumbnailer-scm-1.rockspec` てな感じでインストールして `init.lua` も以下のように変更しとく。
+
+```lua
+thumbnailer = require('thumbnailer');
+```
+
+それから `image.lua` の処理を以下のようにクエリパラメータの調整やエラー処理も追加したりして、ごそっと書き換えます。
+
+```lua
+local args = ngx.req.get_uri_args();
+local size = tonumber( args.s );
+local quality = tonumber( args.q );
+
+-- size value should be larger than 0
+size = size and size > 0 and size or nil;
+-- quality value should be 1 to 100
+quality = quality and quality > 0 and quality <= 100 and quality or nil;
+
+if size or quality then
+    local img = posix.realpath( ngx.var.document_root .. '/' .. ngx.var.uri );
+    
+    if img then
+        local filename, name, ext = ngx.var.uri:match( '(([^/.]+)%.(%w+))$' );
+        local uri = ngx.var.uri:gsub( filename .. '$', 
+                                      table.concat({name, size, quality}, '-' ) 
+                                      .. '.' .. ext );
+        
+        -- set thumbnail-uri if it exists
+        if posix.realpath( ngx.var.document_root .. '/' .. uri ) then
+            ngx.req.set_uri( uri );
+        else
+            local err;
+            img, err = thumbnailer.load( img );
+            
+            if img then
+                
+                if size then
+                    -- resize( width, height, crop, horizontal_align, vertical_align )
+                    img:resize( size, size, true, thumbnailer.ALIGN_CENTER, 
+                                thumbnailer.ALIGN_MIDDLE );
+                end
+                
+                if quality then
+                    img:quality( quality );
+                end
+                
+                err = img:save( ngx.var.document_root .. uri );
+                if not err then
+                    ngx.req.set_uri( uri );
+                end
+            end
+            
+            -- got error
+            if err then
+                ngx.log( ngx.ERR, err );
+            end
+        end
+    end
+end
+```
+
+これで画像のURL `http://localhost:1080/image.jpg?s=100&q=50` にアクセスするとサイズが100x100で画質が50のサムネイルが生成される。
+
+
+## OpenRestyでイメージフィルタ｜まとめ
+
+そんなこんなで、結局 C でモジュール書くはめになっちゃって休日を一日使ってしまってお気軽とはいかなかったけど、普通に nginx モジュールを書いたりするよりはお手軽ではないかと・・（苦）それと、今回作ったファイル一式は github に上げてるので触ってみたい人は気軽にどうぞ。
+
+experimental-resty-imagefilter - https://github.com/mah0x211/experimental-resty-imagefilter
+
+ちなみに、画像を保存してる箇所がボトルネックになってるので、次回はこの辺をどうにか出来ないか実験してみたいと思う。

@@ -1,3 +1,3 @@
 require('posix');
-require('imlib2');
+thumbnailer = require('thumbnailer');
 
