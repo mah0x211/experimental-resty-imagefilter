@@ -107,3 +107,44 @@ ngx.log( ngx.ERR, ngx.var.uri );
 
 これで表示されるようになった。次はこの写真を変換する処理を作ってみる。
 
+## OpenRestyでイメージフィルタ｜実装
+
+そんなわけでリクエストをどう処理するかなんだけれど、クエリパラメータが多いと面倒なので Gravater - http://en.gravatar.com  っぽく `s=<size>` として正方形イメージに変換する。あともう一つ `q=<quality>` で画質も調整できるようにしておこう。ということで URL は `http://localhost:1080/image.jpg?s=100&q=50` という風になる。クエリパラメータが無い時はそのままの画像を返す。
+
+処理の流れは以下のような感じ。
+
+1. クエリパラメータをチェックする。
+2. リクエストされた画像が存在するかの確認。
+3. クエリパラメータに従って画像を変換する。
+4. 変換した画像を返す。
+
+どうやるか決まったので、これらの処理に必要なライブラリをインストールする。変換処理には `Imlib2` ライブラリを利用するので `brew install imlib2` でインストールした後に `luarocks install lua-imlib2` でモジュールをインストールする。それからリクエストされた画像の存在確認もする必要があるので、画像パスの存在確認用に `luaposix` モジュールも `luarocks install luaposix` としてインストールしておく。
+
+
+### クエリーパラメータの処理と画像ファイルの存在確認
+
+インストールが終わったら空っぽだった `init.lua` に以下のように書いてライブラリを読み込む。別に `image.lua` に書いてもいいんだけど、後々ファイルが増えたりした場合とか管理のわかりやすさの面から個人的に分けちゃうくせが付いてるだけなんだけどね。
+
+```lua
+require('posix');
+require('imlib2');
+```
+
+クエリパラメータと画像の存在確認部分までの処理を `image.lua` に書いてみる。
+
+```lua
+local args = ngx.req.get_uri_args();
+local size = tonumber( args.s );
+local quality = tonumber( args.q );
+
+if size or quality then
+    local img = posix.realpath( ngx.var.document_root .. '/' .. ngx.var.uri );
+    
+    if img then
+        ngx.log( ngx.ERR, img, ' size:', size, ' quality:', quality );
+    end
+end
+```
+
+これでブラウザから画像ファイルにアクセスすると、エラーログに画像ファイルの実パスとサイズと画質の指定値のログが吐き出されるのが確認できた。
+
