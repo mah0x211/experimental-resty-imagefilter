@@ -27,14 +27,11 @@ Note: ちなみに、作るー＞文章を書くって流れだと確実に面�
 └── public
     └── images
         └── index.html
-
-
 ```
 
 それから、その辺にころがってるファイルを元にしてテキトーに nginx.conf を以下のようにでっち上げる。
 
-```nginx.conf
-
+```nginx
 worker_processes    1;
 events {
     worker_connections  1024;
@@ -88,9 +85,25 @@ http {
 
 これで初期化フェーズは `luahooks/image.lua` コンテントフェーズを `luahooks/image.lua` でフックすることにする。けど、後で都合が悪くなったら変えるかもしれない。それじゃ、まずは動作確認ってことで `luahooks/image.lua` の中身を以下のように書いて定番の「hello world」を表示してみる。
 
-```image.lua
+```lua
 ngx.say('hello world');
 ```
 
-それからプリフィックスを指定して `/path/to/command/nginx -p /path/to/img-server` で nginx を起動してブラウザで確認。
+それからプリフィックスを指定して `/path/to/command/nginx -p /path/to/img-server` で nginx を起動してブラウザで表示確認。
+
+問題なく確認できたので、次は写真を用意して `public/images/image.jpg` に置いてアクセスしてみる。が、もちろん表示されない。コンテントフェーズをフックしているからこれは当たり前なので、フックする箇所をアクセスフェーズに変更するように `nginx.conf` を書き換える。
+
+```nginx
+location / {
+    access_by_lua_file  luahooks/image.lua;
+}
+```
+
+そして `image.lua` もエラーログにアクセスしてきた URL を出力するように書き換える。
+
+```lua
+ngx.log( ngx.ERR, ngx.var.uri );
+```
+
+これで表示されるようになった。次はこの写真を変換する処理を作ってみる。
 

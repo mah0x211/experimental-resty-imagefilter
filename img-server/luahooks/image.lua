@@ -1,1 +1,1 @@
-ngx.say( 'hello world' );
+ngx.log( ngx.ERR, ngx.var.uri );
